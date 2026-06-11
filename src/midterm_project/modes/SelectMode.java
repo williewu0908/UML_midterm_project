@@ -95,7 +95,11 @@ public class SelectMode extends Mode {
             // 移動被選取的物件
             int dx = e.getX() - lastDragPoint.x;
             int dy = e.getY() - lastDragPoint.y;
-            draggingShape.move(dx, dy);
+            for (Shape s : canvas.getShapes()) {
+                if (s.isSelected()) {
+                    s.move(dx, dy);
+                }
+            }
             lastDragPoint = e.getPoint();
             canvas.repaint();
         } else if (startPoint != null) {

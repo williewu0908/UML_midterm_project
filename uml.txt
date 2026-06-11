@@ -1,0 +1,371 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam nodesep 50
+skinparam ranksep 60
+
+
+' ==========================================
+' Core Classes & Pseudo Code Notes
+' ==========================================
+
+class WorkflowEditor {
+  - document : UMLDocument
+  - canvas : Canvas
+  - controller : EditorController
+  - buttons : List<ToolButton>
+  + setupCreateButton(...)
+}
+note right of WorkflowEditor
+  **setupCreateButton(btn, shapeFactory)**:
+    btn.onMousePressed:
+      canvas.setMode(new CreateShapeMode(shapeFactory))
+    btn.onMouseDragged:
+      canvas.getMode().processExternalDrag(e)
+    btn.onMouseReleased:
+      canvas.getMode().processExternalRelease(e)
+end note
+
+class EditorMenu {
+  - controller : EditorController
+  + EditorMenu(controller: EditorController)
+}
+note right of EditorMenu
+  **EditorMenu(controller)**:
+    groupItem.onClick:
+      controller.groupSelectedShapes()
+    ungroupItem.onClick:
+      controller.ungroupSelectedShapes()
+    labelItem.onClick:
+      controller.customizeSelectedLabel()
+end note
+
+class ToolButton {
+  - isCustomSelected : boolean
+  + setCustomSelected(selected: boolean)
+}
+note right of ToolButton
+  **setCustomSelected(selected)**:
+    this.isCustomSelected = selected
+    repaint()
+end note
+
+class UMLDocument {
+  - shapes : List<Shape>
+  - lines : List<Line>
+  - listeners : List<Runnable>
+  + addListener(listener: Runnable)
+  + notifyListeners()
+  + getShapes() : List<Shape>
+  + getLines() : List<Line>
+  + addShape(s: Shape)
+  + addLine(l: Line)
+  + moveShapeToFront(s: Shape)
+  + groupSelectedShapes()
+  + ungroupSelectedShapes()
+}
+note left of UMLDocument
+  **notifyListeners()**:
+    foreach listener in listeners: listener.run()
+
+  **addShape(s) / addLine(l)**:
+    shapes.add(s) / lines.add(l)
+    notifyListeners()
+
+  **groupSelectedShapes()**:
+    selected = filter(shapes, s -> s.isSelected)
+    if selected.size >= 2:
+      group = new CompositeShape(selected)
+      shapes.removeAll(selected)
+      shapes.add(group)
+      notifyListeners()
+      
+  **ungroupSelectedShapes()**:
+    selected = filter(shapes, s -> s.isSelected)
+    if selected.size == 1 and selected[0] is CompositeShape:
+      shapes.remove(selected[0])
+      shapes.addAll(selected[0].getChildren())
+      notifyListeners()
+end note
+
+class EditorController {
+  - parentWindow : Component
+  - document : UMLDocument
+  + groupSelectedShapes()
+  + ungroupSelectedShapes()
+  + customizeSelectedLabel()
+}
+note right of EditorController
+  **groupSelectedShapes()**:
+    document.groupSelectedShapes()
+
+  **customizeSelectedLabel()**:
+    // 顯示對話框讓使用者輸入標籤名稱與顏色
+    shape.setLabelName(newName)
+    shape.setLabelColor(newColor)
+    document.notifyListeners() // 通知更新畫面
+end note
+
+class Canvas {
+  - document : UMLDocument
+  - currentMode : Mode
+  - previewShape : Shape
+  - previewLine : Line
+  - selectionBox : Rectangle
+  + Canvas(document: UMLDocument)
+  + setMode(mode: Mode)
+  + getShapes() : List<Shape>
+  + getLines() : List<Line>
+  + addShape(s: Shape)
+  + addLine(l: Line)
+  + moveShapeToFront(s: Shape)
+  + setPreviewShape(s: Shape)
+  + setSelectionBox(rect: Rectangle)
+  # paintComponent(g: Graphics)
+}
+note left of Canvas
+  **Canvas(document)**:
+    this.document = document
+    document.addListener(() -> repaint())
+
+  **setMode(mode)**:
+    this.currentMode = mode
+
+  **getShapes()**:
+    return document.getShapes()
+
+  **addShape(s) / addLine(l)**:
+    document.addShape(s) / document.addLine(l)
+    // repaint() 由 Observer Pattern 自動處理
+
+  **setPreviewShape(s)**:
+    this.previewShape = s
+    repaint() // 預覽屬於 View 狀態，直接 repaint
+
+  **paintComponent(g)**:
+    foreach line in document.getLines(): line.draw(g)
+    foreach shape in document.getShapes(): shape.draw(g)
+    if previewShape != null: previewShape.draw(g)
+end note
+
+abstract class Shape {
+  # x, y, w, h : int
+  # isSelected : boolean
+  # isHovered : boolean
+  # ports : Port[]
+  + draw(g: Graphics)
+  + contains(p: Point) : boolean
+  + move(dx: int, dy: int)
+  + setSelected(b: boolean)
+  + isSelected() : boolean
+  + setHovered(b: boolean)
+  + isHovered() : boolean
+  + setBounds(x: int, y: int, w: int, h: int)
+  + getBounds() : Rectangle
+  + getPortAt(p: Point) : Port
+  + getPortLocation(index: int) : Point
+  + resizeByPort(...)
+}
+note left of Shape
+  **draw(g)**:
+    abstract method (impl by subclasses)
+  
+  **contains(p)**:
+    return bounds(x, y, w, h).contains(p)
+
+  **move(dx, dy)**:
+    this.x += dx; this.y += dy
+
+  **setSelected(b)**:
+    this.isSelected = b
+
+  **getPortAt(p)**:
+    foreach port in ports:
+      if port.contains(p) return port
+    return null
+
+  **getPortLocation(index)**:
+    return Point(calc_X, calc_Y) based on index
+
+  **resizeByPort(portIndex, origBounds, newPos)**:
+    calc newX, newY, newW, newH
+    this.setBounds(newX, newY, newW, newH)
+end note
+
+class CompositeShape {
+  - children : List<Shape>
+  + draw(g: Graphics)
+  + move(dx: int, dy: int)
+  + getChildren()
+}
+note bottom of CompositeShape
+  **draw(g)**:
+    foreach child in children:
+      child.draw(g) // 遞迴繪製子圖形
+
+  **move(dx, dy)**:
+    this.x += dx; this.y += dy
+    foreach child in children:
+      child.move(dx, dy)
+end note
+
+class Rect
+class Oval
+
+class Port {
+  - parent : Shape
+  - index : int
+  + contains(p: Point) : boolean
+  + getLocation() : Point
+}
+note right of Port
+  **contains(p)**:
+    loc = this.getLocation()
+    return distance(loc, p) <= PORT_SIZE
+
+  **getLocation()**:
+    return parent.getPortLocation(this.index)
+end note
+
+abstract class Line {
+  # startPort : Port
+  # endPort : Port
+  + draw(g: Graphics)
+  + setTempEndPoint(p: Point)
+}
+note left of Line
+  **draw(g)**:
+    p1 = startPort.getLocation()
+    p2 = endPort != null ? endPort.getLocation() : tempEndPoint
+    drawLine(g, p1, p2)
+    drawArrowHead(g, p2) // abstract
+
+  **setTempEndPoint(p)**:
+    this.tempEndPoint = p // 用於拖曳時的預覽座標
+end note
+
+class AssociationLine
+class CompositionLine
+class GeneralizationLine
+
+abstract class Mode {
+  # canvas : Canvas
+  + mousePressed(e: MouseEvent)
+  + mouseDragged(e: MouseEvent)
+  + mouseReleased(e: MouseEvent)
+  + mouseMoved(e: MouseEvent)
+}
+note right of Mode
+  **mousePressed / Dragged / Released / Moved**:
+    abstract interface methods for subclasses
+end note
+
+class SelectMode {
+  + mousePressed(e: MouseEvent)
+  + mouseDragged(e: MouseEvent)
+  + mouseReleased(e: MouseEvent)
+  + mouseMoved(e: MouseEvent)
+}
+note right of SelectMode
+  **mouseMoved(e)**:
+    foreach shape in canvas.getShapes():
+      shape.setHovered(shape.contains(e.getPoint()))
+    repaint()
+
+  **mousePressed(e)**:
+    if 點到 Port: state = RESIZING
+    else if 點到 Shape: state = MOVING
+    else: state = SELECT_BOX
+
+  **mouseDragged(e)**:
+    if state == RESIZING:
+      resizingShape.resizeByPort(...)
+    else if state == MOVING:
+      foreach shape in selectedShapes: shape.move(dx, dy)
+    else if state == SELECT_BOX:
+      canvas.setSelectionBox(newRect)
+
+  **mouseReleased(e)**:
+    if state == SELECT_BOX:
+      foreach shape in canvas.getShapes():
+        if box.contains(shape) shape.setSelected(true)
+      canvas.setSelectionBox(null)
+    state = IDLE
+end note
+
+class CreateShapeMode {
+  + processExternalDrag(e: MouseEvent)
+  + processExternalRelease(e: MouseEvent)
+}
+note bottom of CreateShapeMode
+  **processExternalDrag(e)**:
+    preview.setBounds(e.getPoint())
+    canvas.setPreviewShape(preview)
+
+  **processExternalRelease(e)**:
+    if canvas.contains(e.getPoint()):
+      canvas.addShape(preview)
+    canvas.setPreviewShape(null)
+    canvas.setMode(previousMode)
+end note
+
+class CreateLinkMode {
+  + mousePressed(e: MouseEvent)
+  + mouseDragged(e: MouseEvent)
+  + mouseReleased(e: MouseEvent)
+}
+note bottom of CreateLinkMode
+  **mousePressed(e)**:
+    startPort = canvas.getShapes().getPortAt(e.getPoint())
+    if startPort != null:
+      previewLine = lineFactory(startPort, null)
+
+  **mouseDragged(e)**:
+    if previewLine != null:
+      previewLine.setTempEndPoint(e.getPoint())
+
+  **mouseReleased(e)**:
+    endPort = canvas.getShapes().getPortAt(e.getPoint())
+    if startPort != null and endPort != null and startPort != endPort:
+      line = lineFactory(startPort, endPort)
+      canvas.addLine(line)
+    startPort = null; previewLine = null
+end note
+
+' ==========================================
+' Relationships
+' ==========================================
+WorkflowEditor "1" *-- "1" Canvas : canvas >
+WorkflowEditor "1" *-- "1" UMLDocument : document >
+WorkflowEditor "1" *-- "1" EditorController : controller >
+WorkflowEditor "1" *-- "*" ToolButton : buttons >
+WorkflowEditor "1" *-- "1" EditorMenu : menu >
+
+EditorMenu "1" --> "1" EditorController : controller >
+EditorController "1" --> "1" UMLDocument : document >
+Canvas "1" --> "1" UMLDocument : document >
+
+UMLDocument "1" *-- "*" Shape : shapes >
+UMLDocument "1" *-- "*" Line : lines >
+
+Canvas "1" <--> "1" Mode : currentMode / canvas >
+
+Shape <|-- Rect
+Shape <|-- Oval
+Shape <|-- CompositeShape
+
+Line <|-- AssociationLine
+Line <|-- CompositionLine
+Line <|-- GeneralizationLine
+
+Mode <|-- SelectMode
+Mode <|-- CreateShapeMode
+Mode <|-- CreateLinkMode
+
+CompositeShape "1" *-- "*" Shape : children >
+Shape "1" *-- "4..8" Port : ports >
+Line "1" --> "2" Port : connects >
+
+CreateShapeMode ..> Shape : creates >
+CreateLinkMode ..> Line : creates >
+
+@enduml

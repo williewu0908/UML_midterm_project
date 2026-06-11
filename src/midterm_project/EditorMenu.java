@@ -6,26 +6,26 @@ import javax.swing.JMenuItem;
 
 // 包含 Edit 這個 Menu，裡面放有 Group 跟 Ungroup 兩個 JMenuItem
 public class EditorMenu extends JMenuBar {
-    private Canvas canvas;
+    private EditorController controller;
 
-    public EditorMenu(Canvas canvas) {
-        this.canvas = canvas;
+    public EditorMenu(EditorController controller) {
+        this.controller = controller;
 
         JMenu editMenu = new JMenu("Edit");
 
         JMenuItem groupItem = new JMenuItem("Group");
         groupItem.addActionListener(e -> {
-            canvas.groupSelectedShapes();
+            controller.groupSelectedShapes();
         });
 
         JMenuItem ungroupItem = new JMenuItem("Ungroup");
         ungroupItem.addActionListener(e -> {
-            canvas.ungroupSelectedShapes();
+            controller.ungroupSelectedShapes();
         });
 
         JMenuItem labelItem = new JMenuItem("Label");
         labelItem.addActionListener(e -> {
-            canvas.customizeSelectedLabel();
+            controller.customizeSelectedLabel();
         });
 
         editMenu.add(groupItem);

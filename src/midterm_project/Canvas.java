@@ -11,23 +11,36 @@ import midterm_project.shapes.Shape;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.ArrayList;
 import java.util.List;
 
 // 擔任 Context (環境)，持有當前的模式並執行繪圖。
-// 繪圖區
+// View
 public class Canvas extends JPanel {
-    private List<Shape> shapes = new ArrayList<>();
-    private List<Line> lines = new ArrayList<>();
+    private UMLDocument document;
+    
     private Mode currentMode;
     private Shape previewShape = null; // 用來存放拖曳中的預覽圖形
     private Line previewLine = null; // 用來存放拖曳中的預覽連結
-    private java.awt.Rectangle selectionBox = null;
+    private Rectangle selectionBox = null;
 
-    public Canvas() {
+    public Canvas(UMLDocument document) {
+        this.document = document;
         setBackground(Color.WHITE);
         setBorder(BorderFactory.createLineBorder(Color.BLACK));
+        
+        // 註冊觀察者：當 Model 資料變更時自動重繪
+        document.addListener(() -> repaint());
+
         // 預設為選取模式
+
+        // ==========================================
+        // State Pattern
+        // 核心機制：事件委派 (Event Delegation)
+        // 畫布本身不處理任何邏輯，而是把所有捕捉到的滑鼠事件
+        // 原封不動地轉交給 currentMode (當前模式) 去執行。
+        // 這讓你未來新增模式時，完全不需要修改 Canvas 裡的程式碼。
+        // 建立 MouseAdapter 物件，負責接收所有的滑鼠事件(MouseAdapter本身是一個空實作，我們只需要重寫需要的方法)
+        // ==========================================
         currentMode = new SelectMode(this);
         MouseAdapter adapter = new MouseAdapter() {
             @Override
@@ -55,18 +68,16 @@ public class Canvas extends JPanel {
     }
 
     public List<Shape> getShapes() {
-        return shapes;
+        return document.getShapes();
     }
 
     public List<Line> getLines() {
-        return lines;
+        return document.getLines();
     }
 
     // 把物件推到最上層
     public void moveShapeToFront(Shape s) {
-        if (shapes.remove(s)) {
-            shapes.add(s); // 加到 List 最後面，繪製時會在最上面
-        }
+        document.moveShapeToFront(s);
     }
 
     public void setMode(Mode mode) {
@@ -78,13 +89,13 @@ public class Canvas extends JPanel {
     }
 
     public void addShape(Shape s) {
-        shapes.add(s);
-        repaint();
+        document.addShape(s);
+        // 不需手動 repaint，Observer 會處理
     }
 
     public void addLine(Line l) {
-        lines.add(l);
-        repaint();
+        document.addLine(l);
+        // 不需手動 repaint，Observer 會處理
     }
 
     public void setPreviewShape(Shape s) {
@@ -97,93 +108,9 @@ public class Canvas extends JPanel {
         repaint();
     }
 
-    public void setSelectionBox(java.awt.Rectangle rect) {
+    public void setSelectionBox(Rectangle rect) {
         this.selectionBox = rect;
         repaint();
-    }
-
-    // 建立群組
-    public void groupSelectedShapes() {
-        List<Shape> selected = new ArrayList<>();
-        for (Shape s : shapes) {
-            if (s.isSelected()) {
-                selected.add(s);
-            }
-        }
-
-        // 如果超過兩個物件被選取，就建立群組
-        if (selected.size() >= 2) {
-            CompositeShape group = new CompositeShape(selected);
-            group.setSelected(true);
-            shapes.removeAll(selected);
-            shapes.add(group); // 會自動加到最後面 (最上層)
-            repaint();
-        }
-    }
-
-    // 解散群組
-    public void ungroupSelectedShapes() {
-        List<Shape> selected = new ArrayList<>();
-        for (Shape s : shapes) {
-            if (s.isSelected()) {
-                selected.add(s);
-            }
-        }
-
-        // 如果剛好選到一個物件，且該物件是群組，就解散群組
-        if (selected.size() == 1 && selected.get(0) instanceof CompositeShape) {
-            CompositeShape group = (CompositeShape) selected.get(0);
-            shapes.remove(group);
-            for (Shape child : group.getChildren()) {
-                child.setSelected(true); // 群組解散後預設選取內部元素
-                shapes.add(child);
-            }
-            repaint();
-        }
-    }
-
-    // 自定義圖形標籤
-    public void customizeSelectedLabel() {
-        List<Shape> selected = new ArrayList<>();
-        for (Shape s : shapes) {
-            if (s.isSelected()) {
-                selected.add(s);
-            }
-        }
-
-        // 必須只有一個物件被選取，而且必須是基本物件 (非 CompositeShape)
-        if (selected.size() == 1 && !(selected.get(0) instanceof CompositeShape)) {
-            Shape target = selected.get(0);
-
-            // 彈跳視窗 Customize Label Style
-            JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
-            panel.add(new JLabel("Label Name:"));
-            JTextField nameField = new JTextField(target.getLabelName());
-            panel.add(nameField);
-
-            panel.add(new JLabel("Label Color:"));
-            JButton colorButton = new JButton("Choose Color...");
-            // 預設顯示標籤原設定
-            colorButton.setBackground(target.getLabelColor());
-
-            Color[] selectedColor = { target.getLabelColor() };
-            colorButton.addActionListener(ev -> {
-                Color c = JColorChooser.showDialog(this, "Choose Label Color", selectedColor[0]);
-                if (c != null) {
-                    selectedColor[0] = c;
-                    colorButton.setBackground(c);
-                }
-            });
-            panel.add(colorButton);
-
-            int result = JOptionPane.showConfirmDialog(this, panel, "Customize Label Style",
-                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-            if (result == JOptionPane.OK_OPTION) {
-                target.setLabelName(nameField.getText());
-                target.setLabelColor(selectedColor[0]);
-                repaint();
-            }
-        }
     }
 
     @Override
@@ -191,12 +118,12 @@ public class Canvas extends JPanel {
         super.paintComponent(g);
 
         // 畫出所有的連線 (先畫線，再畫形狀，確保線在下層)
-        for (Line l : lines) {
+        for (Line l : document.getLines()) {
             l.draw(g);
         }
 
         // 畫出所有的形狀
-        for (Shape s : shapes) {
+        for (Shape s : document.getShapes()) {
             s.draw(g);
         }
 

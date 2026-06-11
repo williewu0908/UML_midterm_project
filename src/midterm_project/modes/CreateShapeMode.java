@@ -17,6 +17,8 @@ public class CreateShapeMode extends Mode {
     private Mode previousMode;
     private JButton sourceButton; // 記錄是哪個按鈕發起的
 
+    // Factory Pattern，傳入 factory，就等於把"建立物件的指令"交出去，不需修改
+    // State Pattern，記錄原有的模式，建立物件完成後會自動跳回原有的模式
     public CreateShapeMode(Canvas canvas, Supplier<Shape> factory, Mode prev, JButton btn) {
         super(canvas);
         this.shapeFactory = factory;
